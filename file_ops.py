@@ -51,16 +51,6 @@ def get_modeldirname(opts):
         addstring += str(opts['gt_stride'])
         modeldir += addstring
 
-    # PreEmph Layer
-    if opts['preemph_G'] and opts['preemph_D'] :
-        modeldir += "_GD"
-    elif opts['preemph_D'] :
-        modeldir += "_D"
-    elif opts['preemph_G'] :
-        modeldir += "_G"
-    if opts['preemph_G'] or opts['preemph_D'] :
-        modeldir += "PreEm"
-
     # add optimizer
     modeldir += "_Adam_D"
     modeldir += str(opts['d_lr'])
@@ -69,10 +59,6 @@ def get_modeldirname(opts):
   
     # add L1 norm
     modeldir += "_L1_" + str(opts ['g_l1loss'])
-    # preemph coef only if it is something other than 0.95
-    if opts['preemph'] > 0 and not opts['preemph'] == 0.95 and not (opts['preemph_G'] or opts['preemph_D']) :
-        modeldir +=  "_preemph_" + str(opts['preemph'])
-
     return modeldir
     
 
