@@ -20,7 +20,18 @@ __!!! Under Construction !!!__
     ```python
     python prepare_data.py
     ```
-    
+2. **Running the models**. The models available in this repository are listed below.
+    1. `run_aecnn.py`        : Auto-encoder CNN model with L1 loss term (No discriminator)
+    1. `run_lsgan_se.py`     : SEGAN with least-squares loss [1]
+    2. `run_wgan-gp_se.py`   : GAN model with Wassterstein loss and Gradient Penalty
+    3. `run_rsgan-gp_se.py`  : GAN model with relativistic standard GAN with Gradient Penalty
+    4. `run_rasgan-gp_se.py` : GAN model with relativistic average standard GAN with Gradient Penalty
+    5. `run_ralsgan-gp_se.py`: GAN model with relativistic average least-squares GAN with Gradient Penalty
+----
+### References
+[1] S. Pascual, A. Bonafonte, and J. Serra, _SEGAN: speech enhancement generative adversarial network_, in INTERSPEECH., ISCA, Aug 2017, pp. 3642–3646.
+
+----
 #### Credits
 The keras implementation of cGAN is based on the following repos
 * [SEGAN](https://github.com/santi-pdp/segan)
