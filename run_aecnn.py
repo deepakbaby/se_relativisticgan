@@ -1,6 +1,9 @@
 """
-Reimplementing segan paper as close as possible. 
-Deepak Baby, UGent, June 2018.
+Reimplementing AECNN model minimizing L1 loss.
+No discriminator.
+
+
+Written by Deepak Baby, UGent, Oct 2018.
 """
 from __future__ import print_function
 
@@ -13,8 +16,6 @@ from keras.layers import LeakyReLU, PReLU, Reshape, Concatenate, Flatten, Add, L
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
-#from keras_contrib.layers.normalization import InstanceNormalization
-#Conv2DTranspose = tf.keras.layers.Conv2DTranspose
 keras_backend = tf.keras.backend
 keras_initializers = tf.keras.initializers
 from data_ops import *
