@@ -20,14 +20,31 @@ __!!! Under Construction !!!__
     ```python
     python prepare_data.py
     ```
-2. **Running the models**. The models available in this repository are listed below.
+2. **Running the models**. The models available in this repository are listed below. Every implementation offers several cGAN configurations. Edit the ```opts``` variable for choosing the cofiguration. The results will be automatically saved to different folders. The folder name is generated from ```files_ops.py ``` and the foldername automatically includes different configuration options.
     1. `run_aecnn.py`        : Auto-encoder CNN model with L1 loss term (No discriminator)
     1. `run_lsgan_se.py`     : SEGAN with least-squares loss [1]
     2. `run_wgan-gp_se.py`   : GAN model with Wassterstein loss and Gradient Penalty
     3. `run_rsgan-gp_se.py`  : GAN model with relativistic standard GAN with Gradient Penalty
     4. `run_rasgan-gp_se.py` : GAN model with relativistic average standard GAN with Gradient Penalty
     5. `run_ralsgan-gp_se.py`: GAN model with relativistic average least-squares GAN with Gradient Penalty
+
+3. **Evaluation on testset is also done together with training**. Set ```TEST_SEGAN = False``` for disabling testing. 
+
 ----
+### Misc
+* **This code loads all the data into memory for speeding up training**. But if you dont have enough memory, it is possible  to read the mini-batches from the disk using HDF5 read. In ```run_segan.py``` 
+  ```python
+  clean_train_data = np.array(fclean['feat_data'])
+  noisy_train_data = np.array(fnoisy['feat_data'])
+  ```
+  change the above lines to 
+  ```python
+  clean_train_data = fclean['feat_data']
+  noisy_train_data = fnoisy['feat_data']
+  ```
+  **But this can lead to a slow-down of about 20 times (on the test machine)** as the mini-batches are to be read from the     disk over several epochs.
+
+---- 
 ### References
 [1] S. Pascual, A. Bonafonte, and J. Serra, _SEGAN: speech enhancement generative adversarial network_, in INTERSPEECH., ISCA, Aug 2017, pp. 3642–3646.
 
