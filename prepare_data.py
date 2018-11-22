@@ -44,9 +44,9 @@ def prepare_sliced_data1d(opts):
     stride = opts['stride']
     minlength = opts['minlength']
     filenames = opts['filenames']
-
-    full_sliced = np.array([]).reshape(0, window_size) # initialize empty array
-    dfi = np.array([]).reshape(0, 2)
+    
+    full_sliced = [] # initialize empty list
+    dfi = []
     dfi_begin = 0
     with open(filenames) as f:
         wav_files = f.read().splitlines() # to get rid of the \n while using readlines()
@@ -57,11 +57,14 @@ def prepare_sliced_data1d(opts):
             print("Processing " + str(ind) + " of " + str(len(wav_files)) + " files.")
         wavfilename = os.path.join(wavfolder, wav_file)
         sliced = read_and_slice1d(wavfilename, window_size, minlength, stride=stride)
-        full_sliced = np.concatenate((full_sliced, sliced), axis=0)
-        dfi = np.concatenate((dfi, np.array([[dfi_begin, dfi_begin + sliced.shape[0]]])), axis=0)
+        full_sliced.append(sliced)
+        dfi.append(np.array([[dfi_begin, dfi_begin + sliced.shape[0]]]))
         dfi_begin += sliced.shape[0]
 
-    return full_sliced, dfi.astype('int')
+    full_slicedstack = np.vstack(full_sliced)
+    dfistack = np.vstack(dfi)
+
+    return full_slicedstack, dfistack.astype('int')
 
 if __name__ == '__main__':
 
