@@ -1,7 +1,7 @@
 # for preparing the segan training and test data
 
 import tensorflow as tf
-from data_loader import *
+from data_ops import *
 import scipy.io.wavfile as wavfile
 import numpy as np
 import os

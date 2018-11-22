@@ -13,7 +13,7 @@ mkdir -p $datadir
 pushd $datadir
 
 for dset in datasets; do
-    if [ ! -d ${dset}_16k ]; then
+    if [ ! -d ${dset}_16kHz ]; then
         # Clean utterances
         if [ ! -f ${dset}.zip ]; then
             echo 'DOWNLOADING $dset'
@@ -23,12 +23,12 @@ for dset in datasets; do
             echo 'INFLATING ${dset}...'
             unzip -q ${det}.zip -d $dset
         fi
-        if [ ! -d ${dset}_16k ]; then
+        if [ ! -d ${dset}_16kHz ]; then
             echo 'CONVERTING WAVS TO 16K...'
-            mkdir -p ${dset}_16k
+            mkdir -p ${dset}_16kHz
             pushd ${dset}
             ls *.wav | while read name; do
-                sox $name -r 16k ../${dset}_16k/$name
+                sox $name -r 16k ../${dset}_16kHz/$name
             done
             popd
         fi
