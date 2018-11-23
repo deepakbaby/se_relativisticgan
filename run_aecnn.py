@@ -28,17 +28,6 @@ from tqdm import *
 import h5py
 import os,sys
 import scipy.io.wavfile as wavfile
-from aecnn_ashutosh_is2018 import *
-
-n_dft = 512
-n_shift = 256
-dft_real_kernels, dft_imag_kernels = get_stft_kernels(n_dft)
-
-print ("DFT matrix sizes")
-print ("Real mat : " + str(dft_real_kernels.shape))
-print ("Imag mat : " + str(dft_imag_kernels.shape))
-
-#exit()
 
 if __name__ == '__main__':
 
@@ -60,7 +49,7 @@ if __name__ == '__main__':
     # label smoothing (set to 1 for no label smoothing)
     opts ['D_real_target'] = 1.0
     # GT initialization
-    opts ['GT_init_G'] = True
+    opts ['GT_init_G'] = False
     opts ['GT_init_D'] = False
     opts ['gt_fixed'] = False # set to True for fixed GT layer
     opts['gt_stride'] = 2 # stride to be applied on GT layer
@@ -142,7 +131,7 @@ if __name__ == '__main__':
     G_wav = G(wav_in_noisy)
     G = Model(wav_in_noisy, G_wav)
     G.summary()
-  
+      
     # compile individual models
     G.compile(loss='mean_absolute_error', optimizer=g_opt)
  
