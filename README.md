@@ -1,9 +1,9 @@
 # Keras framework for speech enhancement using relativistic GANs.
 Uses a fully convolutional end-to-end speech enhancement system.
 
-Implemetation details of the paper submitted to ICASSP-2019
+Implemetation details of the paper accepted to ICASSP-2019
 
-**Deepak Baby and Sarah Verhulst, _SERGAN: Speech enhancement using relativistic generative adversarial networks with gradient penalty_, Submitted to IEEE-ICASSP 2019.**
+**Deepak Baby and Sarah Verhulst, _SERGAN: Speech enhancement using relativistic generative adversarial networks with gradient penalty_, IEEE-ICASSP, May 2019, Brighton, UK.**
 
 __!!! Under Construction !!!__
 
