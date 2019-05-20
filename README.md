@@ -3,7 +3,9 @@ Uses a fully convolutional end-to-end speech enhancement system.
 
 Implemetation details of the paper accepted to ICASSP-2019
 
-**Deepak Baby and Sarah Verhulst, _SERGAN: Speech enhancement using relativistic generative adversarial networks with gradient penalty_, IEEE-ICASSP, May 2019, Brighton, UK.**
+**Deepak Baby and Sarah Verhulst, _SERGAN: Speech enhancement using relativistic generative adversarial networks with gradient penalty_, IEEE-ICASSP, pp. 106-110, May 2019, Brighton, UK.**
+
+> This work was funded with support from the EU Horizon 2020 programme under grant agreement No 678120 (RobSpear).
 
 __!!! Under Construction !!!__
 
