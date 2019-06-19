@@ -1,6 +1,5 @@
 """
-Reimplementing SEGAN paper as close as possible in Keras. 
-But use instance normalization instread of virtual batch normalization
+Reimplementing segan paper as close as possible. 
 Deepak Baby, UGent, June 2018.
 """
 from __future__ import print_function
@@ -9,41 +8,67 @@ import tensorflow as tf
 from tensorflow.contrib.layers import xavier_initializer, flatten, fully_connected
 import numpy as np
 import keras
-from keras.layers import Input, Dense, Conv1D, Conv2D, Conv2DTranspose, BatchNormalization
-from keras.layers import LeakyReLU, PReLU, Reshape, Concatenate, Flatten
+from keras.layers import Input, Dense, Conv1D, Conv2D, Conv2DTranspose
+from keras.layers import LeakyReLU, PReLU, Reshape, Concatenate, Flatten, Activation
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
+from keras.layers.merge import _Merge
 from keras.callbacks import TensorBoard
-keras_backend = tf.keras.backend
+from normalizations import InstanceNormalization
+#Conv2DTranspose = tf.keras.layers.Conv2DTranspose
+import keras.backend as K
 keras_initializers = tf.keras.initializers
 from data_ops import *
 from file_ops import *
 from models import *
-
+from wgan_ops import *
+from functools import partial
 import time
 from tqdm import *
 import h5py
 import os,sys
 import scipy.io.wavfile as wavfile
 
+BATCH_SIZE = 100
+GRADIENT_PENALTY_WEIGHT = 10 # need to tune
+
+class RandomWeightedAverage (_Merge):
+    def _merge_function (self, inputs):
+        weights = K.random_uniform((BATCH_SIZE, 1, 1))
+        return (weights * inputs[0]) + ((1 - weights) * inputs[1])
+
 if __name__ == '__main__':
 
     # Various GAN options
     opts = {}
-    opts ['dirhead'] = "LSGAN"
-    opts ['z_off'] = True # set to True to omit the latent noise input
+    opts ['dirhead'] = "SEWGAN_GP" + str(GRADIENT_PENALTY_WEIGHT)
+    opts ['gp_weight'] = GRADIENT_PENALTY_WEIGHT
+    ##########################
+    opts ['z_off'] = not False # set to True to omit the latent noise input
+    opts ['Gtanh'] = False # set to True if G uses tanh output activation
     # normalization
     #################################
     # Only one of the follwoing should be set to True
-    opts ['applyinstancenorm'] = True
-    opts ['applybatchrenorm'] = False
-    opts ['applybatchnorm'] = False
-    opts ['applygroupnorm'] = False
-    opts ['applyspectralnorm'] = False
     opts ['applybn'] = False
+    opts ['applyinstancenorm'] = False
+    opts ['applygroupnorm'] = False
+    # Set to True for applying instance norm in G as well
+    opts ['applyinstancenorm_G'] = False
     ##################################
+    # label smoothing (set to 1 for no label smoothing)
+    opts ['D_real_target'] = 1.0
+    # GT initialization
+    opts ['GT_init_G'] = False
+    opts ['GT_init_D'] = False
+    opts ['gt_fixed'] = False # set to True for fixed GT layer
+    opts['gt_stride'] = 2 # stride to be applied on GT layer
+    # PreEmph layer
+    opts ['preemph_G'] = False
+    opts ['preemph_D'] = False
+    opts ['preemph_init'] = np.array([[-0.95, 1]]) # initializer for preemph layer
+    opts ['preemph_stride'] = 1 # stride for preemph layer
     # Show model summary
-    opts ['show_summary'] = True
+    opts ['show_summary'] = False
    
     ## Set the matfiles
     clean_train_matfile = "./data/clean_train_segan1d.mat"
@@ -60,19 +85,32 @@ if __name__ == '__main__':
     opts ['g_enc_numkernels'] = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     opts ['d_fmaps'] = opts ['g_enc_numkernels'] # We use the same structure for discriminator
     opts['leakyrelualpha'] = 0.3
-    opts ['batch_size'] = 100
+    opts ['batch_size'] = BATCH_SIZE
     opts ['applyprelu'] = True
-    opts ['preemph'] = 0.95
+
    
     opts ['d_activation'] = 'leakyrelu'
     g_enc_numkernels = opts ['g_enc_numkernels']
     opts ['g_dec_numkernels'] = g_enc_numkernels[:-1][::-1] + [1]
     opts ['gt_stride'] = 2
     opts ['g_l1loss'] = 200.
-    opts ['d_lr'] = 0.0002
-    opts ['g_lr'] = 0.0002
+    opts ['d_lr'] = 2e-4
+    opts ['g_lr'] = 2e-4
     opts ['random_seed'] = 111
-       
+    
+    # load GT filter coef
+    if opts['GT_init_G'] or opts['GT_init_D'] :
+        gtfile = h5py.File('GT_16channel_31tap.mat')
+        gt = np.array(gtfile['gt'])
+        print ("Shape of GT matrix " + str(gt.shape))
+        opts ['gt'] = gt
+
+    # set preemph if there is no preemph layer
+    if not (opts ['preemph_D'] or opts['preemph_G']):
+        opts ['preemph'] = 0.95
+    else :
+        opts ['preemph'] = 0  
+  
     n_epochs = 81
     fs = 16000
     
@@ -90,10 +128,7 @@ if __name__ == '__main__':
         os.makedirs(modeldir)
 
     # Obtain the generator and the discriminator
-    if opts ['applyspectralnorm']:
-        D = discriminatorSN(opts)
-    else :
-        D = discriminator(opts)
+    D = discriminator(opts)
     G = generator(opts)
 
     # Define optimizers
@@ -109,36 +144,89 @@ if __name__ == '__main__':
     if not opts ['z_off']:
         z = Input (shape=(z_dim1, z_dim2), name="noise_input")
         G_wav = G([wav_in_noisy, z])
-        G = Model([wav_in_noisy, z], G_wav)
+        G_model = Model([wav_in_noisy, z], G_wav)
     else :
         G_wav = G(wav_in_noisy)
-        G = Model(wav_in_noisy, G_wav)
+        G_model = Model(wav_in_noisy, G_wav)
  
     d_out = D([wav_in_clean, wav_in_noisy])
-    D = Model([wav_in_clean, wav_in_noisy], d_out)
-    G.summary()
-    D.summary()
+    d_out = Activation('sigmoid', name='d_out')(d_out)
+    D_model = Model([wav_in_clean, wav_in_noisy], d_out)
+    G_model.summary()
+    D_model.summary()
 
-    # compile individual models
-    D.compile(loss='mean_squared_error', optimizer=d_opt)
-    G.compile(loss='mean_absolute_error', optimizer=g_opt)
+    # Compile individual models
+    D_model.compile(loss = wasserstein_loss, optimizer = d_opt)
+    G_model.compile(loss = 'mean_absolute_error', optimizer = g_opt)
 
-    # for the combined model, we set the discriminator to be not trainable
+    # Improved WGANs need a different procedure
+    for layer in D.layers :
+        layer.trainable = False
     D.trainable = False
-    D_out = D([G_wav, wav_in_noisy])
     if not opts ['z_off']:
-        G_D = Model(inputs=[wav_in_clean, wav_in_noisy, z], outputs=[D_out, G_wav])
+        G_wav = G([wav_in_noisy, z])
     else :
-        G_D = Model(inputs=[wav_in_clean, wav_in_noisy], outputs=[D_out, G_wav])
+        G_wav = G(wav_in_noisy)
+    D_out_for_G = D([G_wav, wav_in_noisy])
+    D_out_for_G = Activation('linear', name='DoutG')(D_out_for_G)
+    if not opts ['z_off']:
+        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy, z], outputs = [D_out_for_G, G_wav])
+    else :
+        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy], outputs = [D_out_for_G, G_wav])
+    
     G_D.summary()
-
     G_D.compile(optimizer=g_opt,
-              loss={'model_2': 'mean_absolute_error', 'model_4': 'mean_squared_error'},
-              loss_weights = {'model_2' : opts['g_l1loss'], 'model_4': 1} )
+              loss={'model_2': 'mean_absolute_error', 'DoutG': wasserstein_loss},
+              loss_weights = {'model_2' : opts['g_l1loss'], 'DoutG': 1} )
     print (G_D.metrics_names)
-    
-    #exit ()
-    
+
+    # Now we need D model so that gradient penalty can be incorporated
+    for layer in D.layers :
+        layer.trainable = True
+    for layer in G.layers :
+        layer.trainable = False
+    D.trainable = True
+    G.trainable = False
+    if not opts ['z_off']:
+        G_wav_for_D =  G([wav_in_noisy, z])
+    else :
+        G_wav_for_D = G(wav_in_noisy)
+   
+    d_out_for_G = D([G_wav_for_D, wav_in_noisy])
+    d_out_for_real = D([wav_in_clean, wav_in_noisy])
+    d_out_for_G = Activation('linear', name='Dout_fake')(d_out_for_G)
+    d_out_for_real = Activation('linear', name='Dout_real')(d_out_for_real)
+
+    # for gradient penalty
+    averaged_samples = RandomWeightedAverage()([wav_in_clean, G_wav_for_D])
+    # We will need to this also through D, for computing the gradients
+    d_out_for_averaged = D([averaged_samples, wav_in_noisy])
+    d_out_for_averaged = Activation('linear', name='Dout_avg')(d_out_for_averaged)
+    # compute the GP loss by means of partial function in keras
+    partial_gp_loss = partial(gradient_penalty_loss,
+                              averaged_samples = averaged_samples,
+                               gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT)
+    partial_gp_loss.__name__ = 'gradient_penalty'
+    if not opts ['z_off']:
+        D_final = Model(inputs = [wav_in_clean, wav_in_noisy, z], 
+                        outputs = [d_out_for_real, d_out_for_G, 
+                                   d_out_for_averaged])
+    else :
+        D_final = Model(inputs = [wav_in_clean, wav_in_noisy],
+                        outputs = [d_out_for_real, d_out_for_G,
+                                   d_out_for_averaged])
+    D_final.compile(optimizer = d_opt, 
+                    loss = {'Dout_real' : wasserstein_loss, 'Dout_fake' : wasserstein_loss,
+                             'Dout_avg' : partial_gp_loss})
+    D_final.summary()
+    print (D_final.metrics_names)
+
+    # create label vectors for training
+    positive_y = np.ones((BATCH_SIZE, 1), dtype=np.float32)
+    negative_y = -1 * positive_y
+    dummy_y =  np.zeros((BATCH_SIZE, 1), dtype=np.float32) # for GP Loss
+    zeros_y = dummy_y
+
     if TEST_SEGAN:
         ftestnoisy = h5py.File(noisy_test_matfile)
         noisy_test_data = ftestnoisy['feat_data']
@@ -147,17 +235,11 @@ if __name__ == '__main__':
 
 
     # Begin the training part
-    if TRAIN_SEGAN:   
+    if TRAIN_SEGAN:
         fclean = h5py.File(clean_train_matfile)
-        clean_train_data = np.array(fclean['feat_data']).astype('float32')
+        clean_train_data = np.array(fclean['feat_data'])
         fnoisy = h5py.File(noisy_train_matfile)
-        noisy_train_data = np.array(fnoisy['feat_data']).astype('float32')
-        numtrainsamples = clean_train_data.shape[1]
-        idx_all = np.arange(numtrainsamples)
-        # set random seed
-        np.random.seed(opts['random_seed'])
-        batch_size = opts['batch_size']
-
+        noisy_train_data = np.array(fnoisy['feat_data'])
         print ("********************************************")
         print ("               SEGAN TRAINING               ")
         print ("********************************************")
@@ -193,28 +275,24 @@ if __name__ == '__main__':
                 noisywavs = data_preprocess(noisywavs, preemph=opts['preemph'])
                 noisywavs = np.expand_dims(noisywavs, axis = 2)
                 if not opts ['z_off']:
-                    noiseinput = np.random.normal(0, 1, (batch_size, z_dim1, z_dim2))
-                    g_out = G.predict([noisywavs, noiseinput])
-                else :
-                    g_out = G.predict(noisywavs)
-
-                # train D
-                d_loss_real = D.train_on_batch ({'main_input_clean':cleanwavs, 'main_input_noisy':noisywavs}, 
-                                    opts['D_real_target'] * np.ones((batch_size,1)))
-                d_loss_fake = D.train_on_batch ({'main_input_clean':g_out, 'main_input_noisy':noisywavs}, 
-                                      np.zeros((batch_size,1)))
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
-                # Train the combined model next; here, only the generator part is update
-                valid_g = np.array([1]*batch_size) # generator wants discriminator to give 1 (identify fake as real)
-                if not opts['z_off']:
+                    noiseinput = np.random.normal(0, 1, 
+                                                 (batch_size, z_dim1, z_dim2))
+                    [d_loss, d_loss_real, d_loss_fake, _] = D_final.train_on_batch({'main_input_clean': cleanwavs,
+                                                    'main_input_noisy': noisywavs, 'noise_input': noiseinput},
+                                                     {'Dout_real' : positive_y, 'Dout_fake': negative_y, 
+                                                      'Dout_avg' : dummy_y} ) 
                     [g_loss, g_dLoss, g_l1loss] = G_D.train_on_batch({'main_input_clean': cleanwavs,
                                                     'main_input_noisy': noisywavs, 'noise_input': noiseinput}, 
-                                                          {'model_2': cleanwavs, 'model_4': valid_g} )
+                                                          {'model_2': cleanwavs, 'DoutG': positive_y} )
                 else:
+                    [d_loss,  d_loss_real, d_loss_fake, _] = D_final.train_on_batch({'main_input_clean': cleanwavs,
+                                                      'main_input_noisy': noisywavs,},
+                                                       {'Dout_real' : positive_y, 'Dout_fake': negative_y, 
+                                                        'Dout_avg' : dummy_y})
                     [g_loss, g_dLoss, g_l1loss] = G_D.train_on_batch({'main_input_clean': cleanwavs,
-                                               'main_input_noisy': noisywavs},{'model_2': cleanwavs, 
-                                                          'model_4': valid_g} )
+                                                                      'main_input_noisy': noisywavs},
+                                                                      {'model_2': cleanwavs, 
+                                                                        'DoutG': positive_y} )
                 time_taken = time.time() - start_time
 
                 printlog = "E%d/%d:B%d/%d [D loss: %f] [D real loss: %f] [D fake loss: %f] [G loss: %f] [G_D loss: %f] [G_L1 loss: %f] [Exec. time: %f]" %  (epoch, n_epochs, batch_idx, num_batches_per_epoch, d_loss, d_loss_real, d_loss_fake, g_loss, g_dLoss, g_l1loss, time_taken)

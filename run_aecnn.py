@@ -35,7 +35,6 @@ if __name__ == '__main__':
     opts = {}
     opts ['dirhead'] = "AECNN_L1loss"
     opts ['z_off'] = True # set to True to omit the latent noise input
-    opts ['Gtanh'] = False # set to True if G uses tanh output activation
     # normalization
     #################################
     # Only one of the follwoing should be set to True
@@ -44,20 +43,7 @@ if __name__ == '__main__':
     opts ['applybatchnorm'] = False
     opts ['applygroupnorm'] = False
     opts ['applyspectralnorm'] = False
-    opts ['applyinstancenorm_G'] = False
     ##################################
-    # label smoothing (set to 1 for no label smoothing)
-    opts ['D_real_target'] = 1.0
-    # GT initialization
-    opts ['GT_init_G'] = False
-    opts ['GT_init_D'] = False
-    opts ['gt_fixed'] = False # set to True for fixed GT layer
-    opts['gt_stride'] = 2 # stride to be applied on GT layer
-    # PreEmph layer
-    opts ['preemph_G'] = False
-    opts ['preemph_D'] = False
-    opts ['preemph_init'] = np.array([[-0.95, 1]]) # initializer for preemph layer
-    opts ['preemph_stride'] = 1 # stride for preemph layer
     # Show model summary
     opts ['show_summary'] = True
    
@@ -88,20 +74,7 @@ if __name__ == '__main__':
     opts ['d_lr'] = 0.0002
     opts ['g_lr'] = 0.0002
     opts ['random_seed'] = 111
-    
-    # load GT filter coef
-    if opts['GT_init_G'] or opts['GT_init_D'] :
-        gtfile = h5py.File('GT_16channel_31tap.mat')
-        gt = np.array(gtfile['gt'])
-        print ("Shape of GT matrix " + str(gt.shape))
-        opts ['gt'] = gt
 
-    # set preemph if there is no preemph layer
-    if not (opts ['preemph_D'] or opts['preemph_G']):
-        opts ['preemph'] = 0.95
-    else :
-        opts ['preemph'] = 0  
- 
     n_epochs = 81
     fs = 16000
     
