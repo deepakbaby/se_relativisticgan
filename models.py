@@ -31,12 +31,7 @@ def generator(opts):
     window_length = opts['window_length']
     featdim = opts ['featdim']
     batch_size = opts['batch_size']
-    if opts['GT_init_G']:
-        gt = np.expand_dims(opts['gt'], axis=1)
-        num_gt_filters = gt.shape[2]
-        gt_filterlength = gt.shape[0]
-        gt_bias = np.zeros((num_gt_filters,))
-        
+            
     use_bias = True
     skips = []
     #kernel_init = keras.initializers.TruncatedNormal(stddev=0.02)
@@ -47,13 +42,7 @@ def generator(opts):
 
     # Defining the Encoder
     for layernum, numkernels in enumerate(g_enc_numkernels):
-        if layernum==0 and opts ['GT_init_G']:
-            enc_out = Conv1D(num_gt_filters, gt_filterlength, 
-                               kernel_initializer=kernel_init, strides=pool, 
-                                   padding="same", use_bias=use_bias, 
-                                        name="G_gtlayer")(enc_out)
-        else :
-            enc_out = Conv1D(numkernels, kwidth, strides=pool,
+        enc_out = Conv1D(numkernels, kwidth, strides=pool,
                                kernel_initializer=kernel_init, padding="same", 
                                    use_bias=use_bias)(enc_out)
       
@@ -106,25 +95,13 @@ def generator(opts):
             # Now add the skip connection
             skip_ = skips[-(declayernum + 1)]
             dec_out = keras.layers.concatenate([dec_out, skip_])
-      
-    
-    # Add tanh of G uses tanh activation
-    if opts['Gtanh']:
-        dec_out = Activation('tanh')(dec_out)     
-
+ 
     # Create the model graph
     if opts ['z_off']:
         G = Model(inputs=[wav_in], outputs=[dec_out])
     else :
         G = Model(inputs=[wav_in, z], outputs=[dec_out])
-
-    # add GT initilization
-    if opts['GT_init_G']:
-        G.get_layer("G_gtlayer").set_weights([gt, gt_bias])
-        # set it trainable or not
-        if opts['gt_fixed']:
-            G.get_layer("G_gtlayer").trainable = False
-      
+     
     if opts ['show_summary'] :
         G.summary()
 
@@ -141,14 +118,6 @@ def discriminator(opts):
     strides = opts['strides']
     activation = opts['d_activation']
     kwidth = opts['filterlength']
-    # gammatone layer
-    if opts['GT_init_D']:
-        gt = np.expand_dims(opts['gt'], axis=1)
-        num_gt_filters = gt.shape[2]
-        gt_filterlength = gt.shape[0]
-        gt_bias = np.zeros((num_gt_filters,))
-        # we will need 2D filters since discriminator uses two inputs 
-        gt_con = np.concatenate((gt, gt), axis=1)
         
     wav_in_clean = Input(shape=(window_length, featdim), name='disc_inputclean')
     wav_in_noisy = Input(shape=(window_length, featdim), name='disc_inputnoisy')
@@ -160,11 +129,7 @@ def discriminator(opts):
     d_out = keras.layers.concatenate([wav_in_clean, wav_in_noisy])
 
     for layer_num, numkernels in enumerate(d_fmaps):
-        if layer_num == 0 and opts['GT_init_D']:
-            d_out = Conv1D(num_gt_filters, gt_filterlength, strides=strides, 
-                        kernel_initializer=kernel_init, use_bias=use_bias, padding="same", name="gtlayer")(d_out)
-        else :
-            d_out = Conv1D(numkernels, kwidth, strides=strides, kernel_initializer=kernel_init, 
+        d_out = Conv1D(numkernels, kwidth, strides=strides, kernel_initializer=kernel_init, 
                         use_bias=use_bias, padding="same")(d_out)
 
         if opts['applybn']:
@@ -183,12 +148,6 @@ def discriminator(opts):
     d_out = Dense(1, activation='linear', name='d_output')(d_out)
     D = Model([wav_in_clean, wav_in_noisy], d_out)
   
-    # initialize with GT weights
-    if opts['GT_init_D']:
-        D.get_layer("gtlayer").set_weights([gt_con, gt_bias])
-        if opts['gt_fixed']:
-            D.get_layer("gtlayer").trainable = False
-
     if opts ['show_summary']:
         D.summary()
     return D

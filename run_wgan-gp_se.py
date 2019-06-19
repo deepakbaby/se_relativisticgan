@@ -8,21 +8,17 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.contrib.layers import xavier_initializer, flatten, fully_connected
 import numpy as np
-import keras
-from keras.layers import Input, Dense, Conv1D, Conv2D, Conv2DTranspose
-from keras.layers import LeakyReLU, PReLU, Reshape, Concatenate, Flatten, Activation
+from keras.layers import Activation, Input
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.layers.merge import _Merge
 from keras.callbacks import TensorBoard
-from normalizations import InstanceNormalization
-#Conv2DTranspose = tf.keras.layers.Conv2DTranspose
 import keras.backend as K
-keras_initializers = tf.keras.initializers
+
+from wgan_ops import *
 from data_ops import *
 from file_ops import *
 from models import *
-from wgan_ops import *
 from functools import partial
 import time
 from tqdm import *
@@ -131,11 +127,7 @@ if __name__ == '__main__':
     G_model.summary()
     D_model.summary()
 
-    # Compile individual models
-    D_model.compile(loss = wasserstein_loss, optimizer = d_opt)
-    G_model.compile(loss = 'mean_absolute_error', optimizer = g_opt)
-
-    # Improved WGANs need a different procedure
+    # Incorporating Gradient Penalty
     for layer in D.layers :
         layer.trainable = False
     D.trainable = False
@@ -196,7 +188,7 @@ if __name__ == '__main__':
                              'Dout_avg' : partial_gp_loss})
     D_final.summary()
     print (D_final.metrics_names)
-
+    
     # create label vectors for training
     positive_y = np.ones((BATCH_SIZE, 1), dtype=np.float32)
     negative_y = -1 * positive_y

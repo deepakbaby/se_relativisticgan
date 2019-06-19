@@ -36,10 +36,6 @@ if __name__ == '__main__':
     #################################
     # Only one of the follwoing should be set to True
     opts ['applyinstancenorm'] = True
-    opts ['applybatchrenorm'] = False
-    opts ['applybatchnorm'] = False
-    opts ['applygroupnorm'] = False
-    opts ['applyspectralnorm'] = False
     opts ['applybn'] = False
     ##################################
     # Show model summary
@@ -90,10 +86,7 @@ if __name__ == '__main__':
         os.makedirs(modeldir)
 
     # Obtain the generator and the discriminator
-    if opts ['applyspectralnorm']:
-        D = discriminatorSN(opts)
-    else :
-        D = discriminator(opts)
+    D = discriminator(opts)
     G = generator(opts)
 
     # Define optimizers

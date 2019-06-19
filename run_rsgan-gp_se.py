@@ -7,17 +7,13 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.contrib.layers import xavier_initializer, flatten, fully_connected
 import numpy as np
-import keras
-from keras.layers import Input, Dense, Conv1D, Conv2D, Conv2DTranspose
-from keras.layers import LeakyReLU, PReLU, Reshape, Concatenate, Flatten, Activation
-from keras.models import Sequential, Model
+from keras.layers import Subtract, Activation, Input
+from keras.models import Model
 from keras.optimizers import Adam
 from keras.layers.merge import _Merge
 from keras.callbacks import TensorBoard
-from normalizations import InstanceNormalization
-#Conv2DTranspose = tf.keras.layers.Conv2DTranspose
 import keras.backend as K
-keras_initializers = tf.keras.initializers
+
 from data_ops import *
 from file_ops import *
 from models import *
@@ -41,32 +37,16 @@ if __name__ == '__main__':
 
     # Various GAN options
     opts = {}
-    opts ['dirhead'] = "SEWGAN_GP" + str(GRADIENT_PENALTY_WEIGHT)
+    opts ['dirhead'] = 'RSGAN_GP' + str(GRADIENT_PENALTY_WEIGHT)
     opts ['gp_weight'] = GRADIENT_PENALTY_WEIGHT
     ##########################
     opts ['z_off'] = not False # set to True to omit the latent noise input
-    opts ['Gtanh'] = False # set to True if G uses tanh output activation
     # normalization
     #################################
-    # Only one of the follwoing should be set to True
+    # Only one of the follwoing should be set to True or all of can be False
     opts ['applybn'] = False
-    opts ['applyinstancenorm'] = False
-    opts ['applygroupnorm'] = False
-    # Set to True for applying instance norm in G as well
-    opts ['applyinstancenorm_G'] = False
+    opts ['applyinstancenorm'] = True # Works even without any normalization
     ##################################
-    # label smoothing (set to 1 for no label smoothing)
-    opts ['D_real_target'] = 1.0
-    # GT initialization
-    opts ['GT_init_G'] = False
-    opts ['GT_init_D'] = False
-    opts ['gt_fixed'] = False # set to True for fixed GT layer
-    opts['gt_stride'] = 2 # stride to be applied on GT layer
-    # PreEmph layer
-    opts ['preemph_G'] = False
-    opts ['preemph_D'] = False
-    opts ['preemph_init'] = np.array([[-0.95, 1]]) # initializer for preemph layer
-    opts ['preemph_stride'] = 1 # stride for preemph layer
     # Show model summary
     opts ['show_summary'] = False
    
@@ -83,7 +63,9 @@ if __name__ == '__main__':
     opts ['strides'] = 2
     opts ['padding'] = 'SAME'
     opts ['g_enc_numkernels'] = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+    opts ['g_enc_lstm_cells'] = [1024]
     opts ['d_fmaps'] = opts ['g_enc_numkernels'] # We use the same structure for discriminator
+    opts ['d_lstms'] = opts ['g_enc_lstm_cells']
     opts['leakyrelualpha'] = 0.3
     opts ['batch_size'] = BATCH_SIZE
     opts ['applyprelu'] = True
@@ -97,20 +79,7 @@ if __name__ == '__main__':
     opts ['d_lr'] = 2e-4
     opts ['g_lr'] = 2e-4
     opts ['random_seed'] = 111
-    
-    # load GT filter coef
-    if opts['GT_init_G'] or opts['GT_init_D'] :
-        gtfile = h5py.File('GT_16channel_31tap.mat')
-        gt = np.array(gtfile['gt'])
-        print ("Shape of GT matrix " + str(gt.shape))
-        opts ['gt'] = gt
-
-    # set preemph if there is no preemph layer
-    if not (opts ['preemph_D'] or opts['preemph_G']):
-        opts ['preemph'] = 0.95
-    else :
-        opts ['preemph'] = 0  
-  
+ 
     n_epochs = 81
     fs = 16000
     
@@ -150,16 +119,11 @@ if __name__ == '__main__':
         G_model = Model(wav_in_noisy, G_wav)
  
     d_out = D([wav_in_clean, wav_in_noisy])
-    d_out = Activation('sigmoid', name='d_out')(d_out)
-    D_model = Model([wav_in_clean, wav_in_noisy], d_out)
+    D = Model([wav_in_clean, wav_in_noisy], d_out)
     G_model.summary()
-    D_model.summary()
+    D.summary()
 
-    # Compile individual models
-    D_model.compile(loss = wasserstein_loss, optimizer = d_opt)
-    G_model.compile(loss = 'mean_absolute_error', optimizer = g_opt)
-
-    # Improved WGANs need a different procedure
+    # ADDING RELATIVISTIC LOSS AT OUTPUT
     for layer in D.layers :
         layer.trainable = False
     D.trainable = False
@@ -168,15 +132,19 @@ if __name__ == '__main__':
     else :
         G_wav = G(wav_in_noisy)
     D_out_for_G = D([G_wav, wav_in_noisy])
-    D_out_for_G = Activation('linear', name='DoutG')(D_out_for_G)
+    D_out_for_real = D([wav_in_clean, wav_in_noisy])
+
+    d_outG = Subtract()([D_out_for_G, D_out_for_real])
+    d_outG = Activation('sigmoid', name="DoutG")(d_outG)
+
     if not opts ['z_off']:
-        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy, z], outputs = [D_out_for_G, G_wav])
+        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy, z], outputs = [d_outG, G_wav])
     else :
-        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy], outputs = [D_out_for_G, G_wav])
+        G_D =  Model(inputs=[wav_in_clean, wav_in_noisy], outputs = [d_outG, G_wav])
     
     G_D.summary()
     G_D.compile(optimizer=g_opt,
-              loss={'model_2': 'mean_absolute_error', 'DoutG': wasserstein_loss},
+              loss={'model_2': 'mean_absolute_error', 'DoutG': 'binary_crossentropy'},
               loss_weights = {'model_2' : opts['g_l1loss'], 'DoutG': 1} )
     print (G_D.metrics_names)
 
@@ -194,38 +162,35 @@ if __name__ == '__main__':
    
     d_out_for_G = D([G_wav_for_D, wav_in_noisy])
     d_out_for_real = D([wav_in_clean, wav_in_noisy])
-    d_out_for_G = Activation('linear', name='Dout_fake')(d_out_for_G)
-    d_out_for_real = Activation('linear', name='Dout_real')(d_out_for_real)
-
     # for gradient penalty
     averaged_samples = RandomWeightedAverage()([wav_in_clean, G_wav_for_D])
     # We will need to this also through D, for computing the gradients
     d_out_for_averaged = D([averaged_samples, wav_in_noisy])
-    d_out_for_averaged = Activation('linear', name='Dout_avg')(d_out_for_averaged)
     # compute the GP loss by means of partial function in keras
     partial_gp_loss = partial(gradient_penalty_loss,
                               averaged_samples = averaged_samples,
                                gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT)
     partial_gp_loss.__name__ = 'gradient_penalty'
+    
+    d_outD = Subtract()([d_out_for_real, d_out_for_G])
+    d_outD = Activation('sigmoid', name="DoutD")(d_outD)
+    
     if not opts ['z_off']:
         D_final = Model(inputs = [wav_in_clean, wav_in_noisy, z], 
-                        outputs = [d_out_for_real, d_out_for_G, 
-                                   d_out_for_averaged])
+                        outputs = [d_outD, d_out_for_averaged])
     else :
         D_final = Model(inputs = [wav_in_clean, wav_in_noisy],
-                        outputs = [d_out_for_real, d_out_for_G,
-                                   d_out_for_averaged])
+                        outputs = [d_outD, d_out_for_averaged])
     D_final.compile(optimizer = d_opt, 
-                    loss = {'Dout_real' : wasserstein_loss, 'Dout_fake' : wasserstein_loss,
-                             'Dout_avg' : partial_gp_loss})
+                    loss = ['binary_crossentropy', partial_gp_loss ])
+
     D_final.summary()
     print (D_final.metrics_names)
-
+    
     # create label vectors for training
     positive_y = np.ones((BATCH_SIZE, 1), dtype=np.float32)
     negative_y = -1 * positive_y
     dummy_y =  np.zeros((BATCH_SIZE, 1), dtype=np.float32) # for GP Loss
-    zeros_y = dummy_y
 
     if TEST_SEGAN:
         ftestnoisy = h5py.File(noisy_test_matfile)
@@ -277,25 +242,23 @@ if __name__ == '__main__':
                 if not opts ['z_off']:
                     noiseinput = np.random.normal(0, 1, 
                                                  (batch_size, z_dim1, z_dim2))
-                    [d_loss, d_loss_real, d_loss_fake, _] = D_final.train_on_batch({'main_input_clean': cleanwavs,
+                    [_, d_loss, d_gploss] = D_final.train_on_batch({'main_input_clean': cleanwavs,
                                                     'main_input_noisy': noisywavs, 'noise_input': noiseinput},
-                                                     {'Dout_real' : positive_y, 'Dout_fake': negative_y, 
-                                                      'Dout_avg' : dummy_y} ) 
+                                                     {'DoutD': positive_y, 'model_4': dummy_y} ) 
                     [g_loss, g_dLoss, g_l1loss] = G_D.train_on_batch({'main_input_clean': cleanwavs,
                                                     'main_input_noisy': noisywavs, 'noise_input': noiseinput}, 
                                                           {'model_2': cleanwavs, 'DoutG': positive_y} )
                 else:
-                    [d_loss,  d_loss_real, d_loss_fake, _] = D_final.train_on_batch({'main_input_clean': cleanwavs,
+                    [_, d_loss, d_gploss] = D_final.train_on_batch({'main_input_clean': cleanwavs,
                                                       'main_input_noisy': noisywavs,},
-                                                       {'Dout_real' : positive_y, 'Dout_fake': negative_y, 
-                                                        'Dout_avg' : dummy_y})
+                                                      {'DoutD': positive_y, 'model_4': dummy_y} )
                     [g_loss, g_dLoss, g_l1loss] = G_D.train_on_batch({'main_input_clean': cleanwavs,
                                                                       'main_input_noisy': noisywavs},
                                                                       {'model_2': cleanwavs, 
                                                                         'DoutG': positive_y} )
                 time_taken = time.time() - start_time
 
-                printlog = "E%d/%d:B%d/%d [D loss: %f] [D real loss: %f] [D fake loss: %f] [G loss: %f] [G_D loss: %f] [G_L1 loss: %f] [Exec. time: %f]" %  (epoch, n_epochs, batch_idx, num_batches_per_epoch, d_loss, d_loss_real, d_loss_fake, g_loss, g_dLoss, g_l1loss, time_taken)
+                printlog = "E%d/%d:B%d/%d [D loss: %f] [D_GP loss: %f] [G loss: %f] [G_D loss: %f] [G_L1 loss: %f] [Exec. time: %f]" %  (epoch, n_epochs, batch_idx, num_batches_per_epoch, d_loss, d_gploss, g_loss, g_dLoss, g_l1loss, time_taken)
         
                 print (printlog)
                 # Tensorboard stuff 
