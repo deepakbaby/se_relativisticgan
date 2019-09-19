@@ -7,8 +7,6 @@ Implemetation details of the paper accepted to ICASSP-2019
 
 > This work was funded with support from the EU Horizon 2020 programme under grant agreement No 678120 (RobSpear).
 
-__!!! Under Construction !!!__
-
 ----
 ### Pre-requisites
 1. Install [tensorflow](https://www.tensorflow.org/) and [keras](https://keras.io/)
