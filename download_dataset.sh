@@ -3,7 +3,7 @@
 # https://datashare.is.ed.ac.uk/bitstream/handle/10283/2791
 
 # specify the location to which the database be copied
-datadir='./data/' 
+datadir=data 
 
 
 # adapted from https://github.com/santi-pdp/segan
