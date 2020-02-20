@@ -69,7 +69,7 @@ def prepare_sliced_data1d(opts):
 if __name__ == '__main__':
 
     opts = {}
-    opts ['datafolder'] = "/hdd/databases/valentini/"
+    opts ['datafolder'] = "data"
     opts ['window_size'] = 2**14
     opts['stride']= 0.5
     opts['minlength']= 0.5 * (2 ** 14)
@@ -105,10 +105,10 @@ if __name__ == '__main__':
     # for train set 
     opts['filenames'] = trainfilenames
     # for clean set
-    opts['wavfolder'] = os.path.join(opts['datafolder'], "clean_trainset_wav_16kHz")
+    opts['wavfolder'] = os.path.join(opts['datafolder'], "clean_trainset_56spk_wav_16kHz")
     clean_train_sliced, dfi = prepare_sliced_data1d(opts)
     # for noisy set
-    opts['wavfolder'] = os.path.join(opts['datafolder'], "noisy_trainset_wav_16kHz")
+    opts['wavfolder'] = os.path.join(opts['datafolder'], "noisy_trainset_56spk_wav_16kHz")
     noisy_train_sliced, dfi = prepare_sliced_data1d(opts)
     if clean_train_sliced.shape[0] != noisy_train_sliced.shape[0] :
         raise ValueError('Clean sliced and noisy sliced are not of the same size!')

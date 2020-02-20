@@ -29,6 +29,7 @@ for dset in $datasets; do
             echo 'CONVERTING WAVS TO 16K...'
             mkdir -p ${dset}_16kHz
             pushd ${dset}
+	    ls *.wav > ../${dset}.flist
             ls *.wav | while read name; do
                 sox $name -r 16k ../${dset}_16kHz/$name
             done
@@ -39,6 +40,7 @@ done
 
 popd
 
-# make a copy of the filelists in datadir
-ls clean_trainset_56spk_wav/*.wav > $datadir/train_wav.txt
-ls clean_testset_wav/*.wav > $datadir/test_wav.txt
+# store filenames in datadir
+cp $datadir/clean_trainset_56spk_wav.flist $datadir/train_wav.txt
+cp $datadir/clean_testset_wav.flist $datadir/test_wav.txt
+
