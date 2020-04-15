@@ -64,6 +64,7 @@ if __name__ == '__main__':
     opts['leakyrelualpha'] = 0.3
     opts ['batch_size'] = 100
     opts ['applyprelu'] = True
+    opts ['preemph'] = 0.95
 
    
     opts ['d_activation'] = 'leakyrelu'
