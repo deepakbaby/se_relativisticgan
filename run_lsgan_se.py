@@ -59,6 +59,7 @@ if __name__ == '__main__':
     opts ['batch_size'] = 100
     opts ['applyprelu'] = True
     opts ['preemph'] = 0.95
+    opts ['D_real_target'] = 1. # Use 0.9 0r 0.95 if you want to apply label smoothing
    
     opts ['d_activation'] = 'leakyrelu'
     g_enc_numkernels = opts ['g_enc_numkernels']
@@ -193,7 +194,7 @@ if __name__ == '__main__':
 
                 # train D
                 d_loss_real = D.train_on_batch ({'main_input_clean':cleanwavs, 'main_input_noisy':noisywavs}, 
-                                    np.ones((batch_size,1)))
+                                    opts ['D_real_target'] * np.ones((batch_size,1)))
                 d_loss_fake = D.train_on_batch ({'main_input_clean':g_out, 'main_input_noisy':noisywavs}, 
                                       np.zeros((batch_size,1)))
                 d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
