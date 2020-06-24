@@ -193,7 +193,7 @@ if __name__ == '__main__':
 
                 # train D
                 d_loss_real = D.train_on_batch ({'main_input_clean':cleanwavs, 'main_input_noisy':noisywavs}, 
-                                    opts['D_real_target'] * np.ones((batch_size,1)))
+                                    np.ones((batch_size,1)))
                 d_loss_fake = D.train_on_batch ({'main_input_clean':g_out, 'main_input_noisy':noisywavs}, 
                                       np.zeros((batch_size,1)))
                 d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
